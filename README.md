@@ -25,7 +25,38 @@ The system simulates a simplified cryptocurrency spot exchange, including:
 
 ## 2. High-Level Architecture
 
-![System Architecture](./diagrams/system-architecture.png)
+```plain text
+
+[ Admin Portal (Web/Mobile) ]                     [ User Portal (Web/Mobile) ]       
+(User Mgmt, Risk Ctrl, Market Surveillance)       (Auth, Order, Order Book, Trades, Assets)                
+              |                                  /                |
+              |                                 /                 |
+              |                                /                  |
+              |                               /                   |
+           REST/JWT                       REST/JWT            WebSocket
+              |                              |                    |
+         ┌────▼────────┐                ┌────▼────────┐     ┌─────▼───────┐
+         │ API Gateway │                │ API Gateway │     │ WS Gateway  │ ← (Market Data / Order Book / Trades)
+         └────┬────────┘                └────┬────────┘     └────┬────────┘
+              |                              |                   |  Pub/Sub (Kafka / Redis Stream)
+   ┌──────────▼──────────────────────────────▼───────────────────▼───────────────────────────────────────┐
+   │                                    Service Layer (Spring Boot)                                      │
+   │                Auth Service | Account Service | Risk Service | Order Service                        │
+   │                Matching Engine | Clearing Service | Market Data Service                             │
+   └───────────────────┬─────────────┬───────────┬──────────┬─────────┬───────────────┬──────────────────┘
+                       │             │           │          │         │               │
+               ┌───────▼───┐     ┌───▼────┐      │     ┌────▼────┐    │   ┌───────────▼──────────┐
+               │ PostgreSQL│     │ Redis  │      │     │ Matching│    │   │ Outbox (TX Log)      │ ← Event Publish
+               │  (ACID)   │     │ Cache/ │      │     │ Engine  │    │   │ (Integration Events) │
+               │           │     │ Lock   │      │     └────┬────┘    │   └───────────┬──────────┘
+               └───────────┘     └────────┘      │          │         │               │
+                                                 │   Internal Events  │         Monitoring / Logging
+                                                 │                    │  
+                                             ┌───▼───────┐       ┌────▼────────────────┐
+                                             │ Trades DB │       │ Prometheus / Graf   │
+                                             │ (append)  │       │ ELK / OpenTelemetry │
+                                             └───────────┘       └─────────────────────┘
+```
 
 
 
