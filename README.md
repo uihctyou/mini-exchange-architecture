@@ -173,6 +173,7 @@ mini-exchange-architecture/
 ├── README.md               # This file
 └── LICENSE
 ```
+
 > Using Kubernetes Deployments to ensure zero-downtime rolling updates and auto-healing for all microservices.
 
 
@@ -188,8 +189,8 @@ mini-exchange-architecture/
 
 ## 7. Related Repositories
 
-* **Backend Microservices** → [mini-exchange-backend](#)
-* **Frontend** → [mini-exchange-frontend](#)
+* **Backend Microservices** → [mini-exchange-backend](https://github.com/uihctyou/mini-exchange-backend)
+* **Frontend** → [mini-exchange-frontend](https://github.com/uihctyou/mini-exchange-frontend)
 
 
 
