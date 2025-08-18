@@ -1,9 +1,5 @@
 # Mini Exchange Backend Database Design Summary
 
-## Overview
-
-Hello! I have designed a complete database architecture for your **mini-exchange-backend** project. This is an enterprise-level database design specifically built for digital asset exchanges, fully complying with the technology stack and architectural principles specified in your init-project.prompt.md.
-
 ## 🎯 Design Highlights
 
 ### 1. Complete Business Domain Coverage
@@ -242,23 +238,19 @@ public class OrderService {
 
 ## ✅ Validation Results
 
-I have verified the correctness of the database design:
-
 1. **✅ Spring Boot application starts successfully**
 2. **✅ H2 database connects normally** (development environment)
 3. **✅ JPA/Hibernate configuration is correct**
 4. **✅ All necessary dependencies are configured**
 
-You can now:
+Use
 - Directly use H2 Console to view database structure: `http://localhost:9977/api/h2-console`
 - Start developing JPA Entity classes
 - Implement Service layer for various business modules
 
-This database architecture provides your mini-exchange-backend with:
+This database architecture provides mini-exchange-backend with:
 - 🏗️ **Solid foundation** - Supporting large-scale trading business
 - 🔒 **Financial-grade security** - Fund safety and data integrity assurance  
 - ⚡ **High-performance design** - Partitioned tables and index optimization
 - 🎯 **Business completeness** - Covering complete exchange business processes
 - 🚀 **Scalable architecture** - Supporting microservice evolution
-
-Ready to start implementing specific business modules? We can begin with the user authentication module and gradually improve the entire system!

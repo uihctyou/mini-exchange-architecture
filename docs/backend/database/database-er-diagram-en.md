@@ -537,12 +537,10 @@ flowchart LR
     style M fill:#ffa726
 ```
 
-This complete database design provides your mini-exchange-backend with:
+This complete database design provides mini-exchange-backend with:
 
 1. **Complete Business Domain Coverage**: Full process support from user management to trade execution
 2. **High-Performance Architecture**: Partitioned tables, index optimization, caching strategies
 3. **Data Consistency**: Transaction support, constraint checks, audit trails
 4. **Scalability**: Modular design, event-driven architecture
 5. **Security**: Permission control, risk management system, encrypted storage
-
-You can adjust this architecture according to actual business requirements and gradually implement the functionality of each module.
