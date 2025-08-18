@@ -166,10 +166,8 @@ mini-exchange-architecture/
 │
 ├── diagrams/               # System diagrams (architecture, sequence, ERD)
 ├── docs/                   # Additional documentation
-│   ├── api-spec/            # API specs (Swagger/OpenAPI files)
-│   ├── erd/                 # Database ER diagrams
-│   ├── deployment/          # Docker/K8s deployment configs
-│
+│   ├── frontend/           # Frontend docs
+│   └── backend/            # Backend docs
 ├── README.md               # This file
 └── LICENSE
 ```
