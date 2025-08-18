@@ -163,8 +163,6 @@ sequenceDiagram
 
 ```
 mini-exchange-architecture/
-│
-├── diagrams/               # System diagrams (architecture, sequence, ERD)
 ├── docs/                   # Additional documentation
 │   ├── frontend/           # Frontend docs
 │   └── backend/            # Backend docs
