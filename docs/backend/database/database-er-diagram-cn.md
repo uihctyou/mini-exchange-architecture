@@ -7,26 +7,29 @@ erDiagram
     %% 用戶認證域 (Auth Domain)
     users {
         bigint id PK
-        uuid uuid UK
         varchar username UK
         varchar email UK
         varchar password_hash
-        varchar phone
         varchar first_name
         varchar last_name
+        varchar phone
         varchar status
         integer kyc_level
         timestamp last_login_at
+        integer failed_login_attempts
+        timestamp locked_until
+        integer version
         timestamp created_at
         timestamp updated_at
-        integer version
     }
     
     roles {
         serial id PK
         varchar name UK
         text description
+        boolean is_active
         timestamp created_at
+        timestamp updated_at
     }
     
     permissions {
@@ -36,18 +39,332 @@ erDiagram
         varchar action
         text description
         timestamp created_at
+        timestamp updated_at
     }
     
     user_roles {
         bigint user_id PK,FK
         integer role_id PK,FK
-        timestamp created_at
+        timestamp granted_at
+        bigint granted_by FK
     }
     
     role_permissions {
         integer role_id PK,FK
         integer permission_id PK,FK
+    }
+    
+    kyc_records {
+        bigserial id PK
+        bigint user_id FK
+        integer level
+        varchar status
+        varchar document_type
+        varchar document_number
+        jsonb submitted_data
+        text review_notes
+        bigint reviewed_by FK
+        timestamp reviewed_at
         timestamp created_at
+        timestamp updated_at
+    }
+
+    %% 資產管理域
+    assets {
+        serial id PK
+        varchar symbol UK
+        varchar name
+        varchar type
+        integer decimals
+        boolean is_active
+        decimal min_withdraw_amount
+        decimal withdraw_fee
+        decimal daily_withdraw_limit
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    accounts {
+        bigserial id PK
+        bigint user_id FK
+        integer asset_id FK
+        decimal available_balance
+        decimal frozen_balance
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    transactions {
+        bigserial id PK
+        bigint user_id FK
+        integer asset_id FK
+        varchar type
+        decimal amount
+        decimal balance_before
+        decimal balance_after
+        varchar reference_type
+        varchar reference_id
+        text description
+        timestamp created_at
+        bigint created_by FK
+    }
+    
+    balance_freezes {
+        bigserial id PK
+        bigint user_id FK
+        integer asset_id FK
+        decimal amount
+        varchar reason
+        varchar reference_type
+        varchar reference_id
+        varchar status
+        timestamp created_at
+        timestamp released_at
+    }
+    
+    deposit_withdrawals {
+        bigserial id PK
+        bigint user_id FK
+        integer asset_id FK
+        varchar type
+        decimal amount
+        decimal fee
+        varchar status
+        varchar tx_hash
+        varchar address
+        integer confirmations
+        integer required_confirmations
+        timestamp processed_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    %% 訂單管理域
+    trading_pairs {
+        serial id PK
+        varchar symbol UK
+        integer base_asset_id FK
+        integer quote_asset_id FK
+        varchar status
+        decimal min_order_amount
+        decimal max_order_amount
+        integer price_precision
+        integer amount_precision
+        decimal maker_fee
+        decimal taker_fee
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    orders {
+        bigserial id PK
+        bigint user_id FK
+        integer trading_pair_id FK
+        varchar type
+        varchar side
+        decimal amount
+        decimal price
+        decimal remaining_amount
+        decimal filled_amount
+        decimal average_price
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    trades {
+        bigserial id PK
+        integer trading_pair_id FK
+        bigint buy_order_id FK
+        bigint sell_order_id FK
+        bigint buyer_user_id FK
+        bigint seller_user_id FK
+        decimal amount
+        decimal price
+        decimal buyer_fee
+        decimal seller_fee
+        timestamp created_at
+    }
+    
+    klines {
+        bigserial id PK
+        integer trading_pair_id FK
+        varchar interval
+        timestamp open_time
+        timestamp close_time
+        decimal open_price
+        decimal high_price
+        decimal low_price
+        decimal close_price
+        decimal volume
+        decimal quote_volume
+        integer trades_count
+    }
+    
+    ticker_24hr {
+        integer trading_pair_id PK,FK
+        decimal open_price
+        decimal high_price
+        decimal low_price
+        decimal close_price
+        decimal volume
+        decimal quote_volume
+        decimal price_change
+        decimal price_change_percent
+        integer trades_count
+        timestamp updated_at
+    }
+
+    %% 風險管理域
+    risk_rules {
+        serial id PK
+        varchar name UK
+        varchar type
+        jsonb parameters
+        boolean is_active
+        text description
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    risk_events {
+        bigserial id PK
+        bigint user_id FK
+        integer rule_id FK
+        varchar type
+        varchar level
+        jsonb details
+        varchar status
+        timestamp created_at
+        timestamp resolved_at
+    }
+
+    %% 清算結算域
+    settlement_batches {
+        bigserial id PK
+        date batch_date UK
+        varchar status
+        integer total_trades
+        decimal total_volume
+        timestamp started_at
+        timestamp completed_at
+        timestamp created_at
+    }
+    
+    settlement_details {
+        bigserial id PK
+        bigint batch_id FK
+        bigint user_id FK
+        integer asset_id FK
+        decimal trade_amount
+        decimal fee_amount
+        decimal net_amount
+        timestamp created_at
+    }
+
+    %% 通知域
+    notification_templates {
+        serial id PK
+        varchar name UK
+        varchar type
+        varchar subject
+        text content
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    notifications {
+        bigserial id PK
+        bigint user_id FK
+        integer template_id FK
+        varchar type
+        varchar title
+        text content
+        varchar status
+        timestamp sent_at
+        text error_message
+        timestamp created_at
+    }
+
+    %% 系統表
+    outbox_events {
+        bigserial id PK
+        varchar aggregate_type
+        varchar aggregate_id
+        varchar event_type
+        jsonb event_data
+        uuid correlation_id
+        varchar status
+        integer retry_count
+        timestamp next_retry_at
+        timestamp created_at
+        timestamp processed_at
+    }
+    
+    audit_logs {
+        bigserial id PK
+        bigint user_id FK
+        varchar action
+        varchar resource_type
+        varchar resource_id
+        jsonb old_values
+        jsonb new_values
+        inet ip_address
+        text user_agent
+        timestamp created_at
+    }
+
+    %% 關聯關係
+    %% 認證域關聯
+    users ||--o{ user_roles : "擁有角色"
+    roles ||--o{ user_roles : "分配給用戶"
+    roles ||--o{ role_permissions : "擁有權限"
+    permissions ||--o{ role_permissions : "授予角色"
+    users ||--o{ kyc_records : "提交KYC"
+    users ||--o{ kyc_records : "審核KYC"
+    users ||--o{ user_roles : "授予角色"
+
+    %% 資產管理關聯
+    users ||--o{ accounts : "擁有賬戶"
+    assets ||--o{ accounts : "資產賬戶"
+    users ||--o{ transactions : "創建交易"
+    assets ||--o{ transactions : "資產交易"
+    users ||--o{ transactions : "創建者"
+    users ||--o{ balance_freezes : "凍結資金"
+    assets ||--o{ balance_freezes : "凍結資產"
+    users ||--o{ deposit_withdrawals : "發起充提"
+    assets ||--o{ deposit_withdrawals : "充提資產"
+
+    %% 訂單管理關聯
+    assets ||--o{ trading_pairs : "基礎資產"
+    assets ||--o{ trading_pairs : "計價資產"
+    users ||--o{ orders : "下訂單"
+    trading_pairs ||--o{ orders : "交易對訂單"
+    trading_pairs ||--o{ trades : "交易對成交"
+    orders ||--o{ trades : "買單"
+    orders ||--o{ trades : "賣單"
+    users ||--o{ trades : "買方"
+    users ||--o{ trades : "賣方"
+    trading_pairs ||--o{ klines : "價格數據"
+    trading_pairs ||--|| ticker_24hr : "24小時統計"
+
+    %% 風險管理關聯
+    users ||--o{ risk_events : "觸發風險事件"
+    risk_rules ||--o{ risk_events : "定義風險規則"
+
+    %% 結算關聯
+    settlement_batches ||--o{ settlement_details : "包含明細"
+    users ||--o{ settlement_details : "用戶結算"
+    assets ||--o{ settlement_details : "結算資產"
+
+    %% 通知關聯
+    users ||--o{ notifications : "接收通知"
+    notification_templates ||--o{ notifications : "使用模板"
+
+    %% 審計關聯
+    users ||--o{ audit_logs : "用戶操作記錄"
+```
     }
     
     kyc_records {

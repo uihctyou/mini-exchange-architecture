@@ -7,26 +7,29 @@ erDiagram
     %% Authentication Domain (Auth Domain)
     users {
         bigint id PK
-        uuid uuid UK
         varchar username UK
         varchar email UK
         varchar password_hash
-        varchar phone
         varchar first_name
         varchar last_name
+        varchar phone
         varchar status
         integer kyc_level
         timestamp last_login_at
+        integer failed_login_attempts
+        timestamp locked_until
+        integer version
         timestamp created_at
         timestamp updated_at
-        integer version
     }
     
     roles {
         serial id PK
         varchar name UK
         text description
+        boolean is_active
         timestamp created_at
+        timestamp updated_at
     }
     
     permissions {
@@ -36,18 +39,19 @@ erDiagram
         varchar action
         text description
         timestamp created_at
+        timestamp updated_at
     }
     
     user_roles {
         bigint user_id PK,FK
         integer role_id PK,FK
-        timestamp created_at
+        timestamp granted_at
+        bigint granted_by FK
     }
     
     role_permissions {
         integer role_id PK,FK
         integer permission_id PK,FK
-        timestamp created_at
     }
     
     kyc_records {
@@ -57,14 +61,15 @@ erDiagram
         varchar status
         varchar document_type
         varchar document_number
-        timestamp submitted_at
-        timestamp reviewed_at
+        jsonb submitted_data
+        text review_notes
         bigint reviewed_by FK
-        text notes
+        timestamp reviewed_at
         timestamp created_at
+        timestamp updated_at
     }
 
-    %% Asset Management Domain (Asset Domain)
+    %% Asset Management Domain
     assets {
         serial id PK
         varchar symbol UK
@@ -73,9 +78,8 @@ erDiagram
         integer decimals
         boolean is_active
         decimal min_withdraw_amount
-        decimal max_withdraw_amount
         decimal withdraw_fee
-        decimal deposit_fee
+        decimal daily_withdraw_limit
         timestamp created_at
         timestamp updated_at
     }
@@ -86,16 +90,12 @@ erDiagram
         integer asset_id FK
         decimal available_balance
         decimal frozen_balance
-        decimal total_balance
-        bigint last_transaction_id
         timestamp created_at
         timestamp updated_at
-        integer version
     }
     
     transactions {
         bigserial id PK
-        uuid uuid UK
         bigint user_id FK
         integer asset_id FK
         varchar type
@@ -103,7 +103,7 @@ erDiagram
         decimal balance_before
         decimal balance_after
         varchar reference_type
-        bigint reference_id
+        varchar reference_id
         text description
         timestamp created_at
         bigint created_by FK
@@ -111,27 +111,260 @@ erDiagram
     
     balance_freezes {
         bigserial id PK
-        bigint account_id FK
+        bigint user_id FK
+        integer asset_id FK
         decimal amount
-        varchar type
-        bigint reference_id
+        varchar reason
+        varchar reference_type
+        varchar reference_id
         varchar status
-        timestamp expires_at
         timestamp created_at
         timestamp released_at
     }
     
     deposit_withdrawals {
         bigserial id PK
-        uuid uuid UK
         bigint user_id FK
         integer asset_id FK
         varchar type
         decimal amount
         decimal fee
-        decimal net_amount
         varchar status
+        varchar tx_hash
         varchar address
+        integer confirmations
+        integer required_confirmations
+        timestamp processed_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    %% Order Management Domain
+    trading_pairs {
+        serial id PK
+        varchar symbol UK
+        integer base_asset_id FK
+        integer quote_asset_id FK
+        varchar status
+        decimal min_order_amount
+        decimal max_order_amount
+        integer price_precision
+        integer amount_precision
+        decimal maker_fee
+        decimal taker_fee
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    orders {
+        bigserial id PK
+        bigint user_id FK
+        integer trading_pair_id FK
+        varchar type
+        varchar side
+        decimal amount
+        decimal price
+        decimal remaining_amount
+        decimal filled_amount
+        decimal average_price
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    trades {
+        bigserial id PK
+        integer trading_pair_id FK
+        bigint buy_order_id FK
+        bigint sell_order_id FK
+        bigint buyer_user_id FK
+        bigint seller_user_id FK
+        decimal amount
+        decimal price
+        decimal buyer_fee
+        decimal seller_fee
+        timestamp created_at
+    }
+    
+    klines {
+        bigserial id PK
+        integer trading_pair_id FK
+        varchar interval
+        timestamp open_time
+        timestamp close_time
+        decimal open_price
+        decimal high_price
+        decimal low_price
+        decimal close_price
+        decimal volume
+        decimal quote_volume
+        integer trades_count
+    }
+    
+    ticker_24hr {
+        integer trading_pair_id PK,FK
+        decimal open_price
+        decimal high_price
+        decimal low_price
+        decimal close_price
+        decimal volume
+        decimal quote_volume
+        decimal price_change
+        decimal price_change_percent
+        integer trades_count
+        timestamp updated_at
+    }
+
+    %% Risk Management Domain
+    risk_rules {
+        serial id PK
+        varchar name UK
+        varchar type
+        jsonb parameters
+        boolean is_active
+        text description
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    risk_events {
+        bigserial id PK
+        bigint user_id FK
+        integer rule_id FK
+        varchar type
+        varchar level
+        jsonb details
+        varchar status
+        timestamp created_at
+        timestamp resolved_at
+    }
+
+    %% Clearing & Settlement Domain
+    settlement_batches {
+        bigserial id PK
+        date batch_date UK
+        varchar status
+        integer total_trades
+        decimal total_volume
+        timestamp started_at
+        timestamp completed_at
+        timestamp created_at
+    }
+    
+    settlement_details {
+        bigserial id PK
+        bigint batch_id FK
+        bigint user_id FK
+        integer asset_id FK
+        decimal trade_amount
+        decimal fee_amount
+        decimal net_amount
+        timestamp created_at
+    }
+
+    %% Notification Domain
+    notification_templates {
+        serial id PK
+        varchar name UK
+        varchar type
+        varchar subject
+        text content
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    notifications {
+        bigserial id PK
+        bigint user_id FK
+        integer template_id FK
+        varchar type
+        varchar title
+        text content
+        varchar status
+        timestamp sent_at
+        text error_message
+        timestamp created_at
+    }
+
+    %% System Tables
+    outbox_events {
+        bigserial id PK
+        varchar aggregate_type
+        varchar aggregate_id
+        varchar event_type
+        jsonb event_data
+        uuid correlation_id
+        varchar status
+        integer retry_count
+        timestamp next_retry_at
+        timestamp created_at
+        timestamp processed_at
+    }
+    
+    audit_logs {
+        bigserial id PK
+        bigint user_id FK
+        varchar action
+        varchar resource_type
+        varchar resource_id
+        jsonb old_values
+        jsonb new_values
+        inet ip_address
+        text user_agent
+        timestamp created_at
+    }
+
+    %% Relationships
+    %% Authentication Domain Relationships
+    users ||--o{ user_roles : "has roles"
+    roles ||--o{ user_roles : "assigned to users"
+    roles ||--o{ role_permissions : "has permissions"
+    permissions ||--o{ role_permissions : "granted to roles"
+    users ||--o{ kyc_records : "submits KYC"
+    users ||--o{ kyc_records : "reviews KYC"
+    users ||--o{ user_roles : "grants roles"
+
+    %% Asset Management Relationships
+    users ||--o{ accounts : "owns accounts"
+    assets ||--o{ accounts : "account for asset"
+    users ||--o{ transactions : "creates transactions"
+    assets ||--o{ transactions : "transaction in asset"
+    users ||--o{ transactions : "created by"
+    users ||--o{ balance_freezes : "has frozen funds"
+    assets ||--o{ balance_freezes : "frozen asset"
+    users ||--o{ deposit_withdrawals : "initiates deposits/withdrawals"
+    assets ||--o{ deposit_withdrawals : "deposit/withdraw asset"
+
+    %% Order Management Relationships
+    assets ||--o{ trading_pairs : "base asset"
+    assets ||--o{ trading_pairs : "quote asset"
+    users ||--o{ orders : "places orders"
+    trading_pairs ||--o{ orders : "orders for pair"
+    trading_pairs ||--o{ trades : "trades in pair"
+    orders ||--o{ trades : "buy order"
+    orders ||--o{ trades : "sell order"
+    users ||--o{ trades : "buyer"
+    users ||--o{ trades : "seller"
+    trading_pairs ||--o{ klines : "price data"
+    trading_pairs ||--|| ticker_24hr : "24hr stats"
+
+    %% Risk Management Relationships
+    users ||--o{ risk_events : "triggers risk events"
+    risk_rules ||--o{ risk_events : "defines risk rules"
+
+    %% Settlement Relationships
+    settlement_batches ||--o{ settlement_details : "contains details"
+    users ||--o{ settlement_details : "settled for user"
+    assets ||--o{ settlement_details : "settled asset"
+
+    %% Notification Relationships
+    users ||--o{ notifications : "receives notifications"
+    notification_templates ||--o{ notifications : "template used"
+
+    %% Audit Relationships
+    users ||--o{ audit_logs : "user actions logged"
+```
         varchar tx_hash
         integer confirmations
         integer required_confirmations

@@ -19,7 +19,7 @@ Using **DDD (Domain-Driven Design)** principles, the entire exchange business is
 #### 🔒 Fund Security Assurance
 ```sql
 -- Non-negative balance constraints
-available_balance DECIMAL(36,18) NOT NULL DEFAULT 0 CHECK (available_balance >= 0)
+available_balance DECIMAL(20,8) NOT NULL DEFAULT 0 CHECK (available_balance >= 0)
 -- Double-entry bookkeeping system
 balance_before + amount = balance_after
 -- Optimistic locking for concurrency
@@ -28,9 +28,15 @@ version INTEGER NOT NULL DEFAULT 0
 
 #### ⚡ High-Performance Design
 ```sql
--- Partitioning strategy (monthly partitions)
+-- Partitioning strategy (monthly partitions with dynamic creation)
 CREATE TABLE orders (...) PARTITION BY RANGE (created_at);
 CREATE TABLE trades (...) PARTITION BY RANGE (created_at);
+CREATE TABLE klines (...) PARTITION BY RANGE (open_time);
+CREATE TABLE notifications (...) PARTITION BY RANGE (created_at);
+CREATE TABLE audit_logs (...) PARTITION BY RANGE (created_at);
+
+-- Dynamic partition management function
+CREATE OR REPLACE FUNCTION create_monthly_partition(table_name TEXT, partition_date DATE);
 
 -- Composite index optimization
 CREATE INDEX idx_orders_price_side ON orders(trading_pair_id, side, price, created_at);
@@ -39,79 +45,206 @@ CREATE INDEX idx_orders_price_side ON orders(trading_pair_id, side, price, creat
 #### 🎛️ Flexible Configuration System
 ```sql
 -- JSON-configured risk rules
-conditions JSONB NOT NULL  -- {"max_daily_volume": 100000}
-actions JSONB NOT NULL     -- {"action": "BLOCK_TRADING"}
+parameters JSONB NOT NULL  -- {"max_daily_volume": 100000}
 
 -- Configurable trading parameters
 price_precision INTEGER NOT NULL DEFAULT 8
-taker_fee_rate DECIMAL(10,6) NOT NULL DEFAULT 0.001
+maker_fee DECIMAL(6,4) NOT NULL DEFAULT 0.001
+taker_fee DECIMAL(6,4) NOT NULL DEFAULT 0.001
 ```
 
 ## 📋 Core Table Structure
 
-### User & Permission System
+## 📋 Core Table Structure
+
+### 1. Authentication Domain
 ```
 users (user basic information)
-├── roles (role definitions)
-├── permissions (permission definitions)  
-├── user_roles (user-role associations)
-├── role_permissions (role-permission associations)
-└── kyc_records (KYC verification records)
+├── id, username, email, password_hash
+├── first_name, last_name, phone
+├── status, kyc_level, last_login_at
+├── failed_login_attempts, locked_until
+└── version, created_at, updated_at
+
+roles (role definitions)
+├── id, name, description, is_active
+└── created_at, updated_at
+
+permissions (permission definitions)
+├── id, name, resource, action, description
+└── created_at, updated_at
+
+user_roles (user-role associations)
+├── user_id, role_id
+├── granted_at, granted_by
+└── PRIMARY KEY (user_id, role_id)
+
+role_permissions (role-permission associations)
+├── role_id, permission_id
+└── PRIMARY KEY (role_id, permission_id)
+
+kyc_records (KYC verification records)
+├── id, user_id, level, status
+├── document_type, document_number
+├── submitted_data (JSONB), review_notes
+├── reviewed_by, reviewed_at
+└── created_at, updated_at
 ```
 
-### Asset & Account System
+### 2. Asset Management Domain
 ```
 assets (asset definitions: BTC, ETH, USDT...)
-├── accounts (user multi-asset accounts)
-├── transactions (transaction records - double-entry)
-├── balance_freezes (fund freeze management)
-└── deposit_withdrawals (deposit/withdrawal records)
+├── id, symbol, name, type
+├── decimals, is_active
+├── min_withdraw_amount, withdraw_fee
+├── daily_withdraw_limit
+└── created_at, updated_at
+
+accounts (user multi-asset accounts)
+├── id, user_id, asset_id
+├── available_balance, frozen_balance
+├── created_at, updated_at
+└── UNIQUE(user_id, asset_id)
+
+transactions (transaction records - double-entry)
+├── id, user_id, asset_id, type
+├── amount, balance_before, balance_after
+├── reference_type, reference_id
+├── description, created_at, created_by
+└── CHECK (available_balance >= 0 AND frozen_balance >= 0)
+
+balance_freezes (fund freeze management)
+├── id, user_id, asset_id, amount
+├── reason, reference_type, reference_id
+├── status, created_at, released_at
+└── status: ACTIVE, RELEASED
+
+deposit_withdrawals (deposit/withdrawal records)
+├── id, user_id, asset_id, type
+├── amount, fee, status
+├── tx_hash, address
+├── confirmations, required_confirmations
+├── processed_at, created_at, updated_at
+└── status: PENDING, CONFIRMED, FAILED, CANCELLED
 ```
 
-### Trading & Matching System
+### 3. Order Management Domain
 ```
 trading_pairs (trading pairs: BTCUSDT, ETHUSDT...)
-├── orders (orders table - partitioned)
-├── trades (trade records - partitioned)
-├── klines (K-line data - partitioned)
-└── ticker_24hr (24-hour statistics)
+├── id, symbol, base_asset_id, quote_asset_id
+├── status, min_order_amount, max_order_amount
+├── price_precision, amount_precision
+├── maker_fee, taker_fee
+└── created_at, updated_at
+
+orders (orders table - partitioned by created_at)
+├── id, user_id, trading_pair_id
+├── type, side, amount, price
+├── remaining_amount, filled_amount, average_price
+├── status, created_at, updated_at
+└── PARTITION BY RANGE (created_at)
+
+trades (trade records - partitioned by created_at)
+├── id, trading_pair_id
+├── buy_order_id, sell_order_id
+├── buyer_user_id, seller_user_id
+├── amount, price, buyer_fee, seller_fee
+├── created_at
+└── PARTITION BY RANGE (created_at)
+
+klines (K-line data - partitioned by open_time)
+├── id, trading_pair_id, interval
+├── open_time, close_time
+├── open_price, high_price, low_price, close_price
+├── volume, quote_volume, trades_count
+└── PARTITION BY RANGE (open_time)
+
+ticker_24hr (24-hour statistics)
+├── trading_pair_id (PRIMARY KEY)
+├── open_price, high_price, low_price, close_price
+├── volume, quote_volume
+├── price_change, price_change_percent
+├── trades_count, updated_at
 ```
 
-### Risk Control & Compliance System
+### 4. Risk Management & Compliance Domain
 ```
 risk_rules (risk rule configuration)
-├── risk_events (risk event records)
-├── settlement_batches (settlement batches)
-├── settlement_details (settlement details)
-└── audit_logs (audit logs - partitioned)
+├── id, name, type, parameters (JSONB)
+├── is_active, description
+└── created_at, updated_at
+
+risk_events (risk event records)
+├── id, user_id, rule_id
+├── type, level, details (JSONB)
+├── status, created_at, resolved_at
+└── level: LOW, MEDIUM, HIGH, CRITICAL
+
+settlement_batches (settlement batches)
+├── id, batch_date, status
+├── total_trades, total_volume
+├── started_at, completed_at, created_at
+└── UNIQUE(batch_date)
+
+settlement_details (settlement details)
+├── id, batch_id, user_id, asset_id
+├── trade_amount, fee_amount, net_amount
+└── created_at
+
+notification_templates (notification templates)
+├── id, name, type, subject, content
+├── is_active, created_at, updated_at
+└── type: EMAIL, SMS, PUSH, WEBHOOK
+
+notifications (notification records - partitioned by created_at)
+├── id, user_id, template_id, type
+├── title, content, status
+├── sent_at, error_message, created_at
+└── PARTITION BY RANGE (created_at)
+
+outbox_events (event publishing - Outbox Pattern)
+├── id, aggregate_type, aggregate_id
+├── event_type, event_data (JSONB)
+├── correlation_id, status, retry_count
+├── next_retry_at, created_at, processed_at
+└── status: PENDING, PROCESSED, FAILED
+
+audit_logs (audit logs - partitioned by created_at)
+├── id, user_id, action
+├── resource_type, resource_id
+├── old_values (JSONB), new_values (JSONB)
+├── ip_address, user_agent, created_at
+└── PARTITION BY RANGE (created_at)
 ```
 
 ## 🚀 Implemented Files
 
-### 1. Database Schema
-📁 **`src/main/resources/schema/schema.sql`** - Complete database structure
-- ✅ 13 core business tables + partitioned tables
-- ✅ Complete constraints and indexes
-- ✅ Triggers and functions
-- ✅ Initial data and permissions
+### 1. Database Initialization Scripts
+📁 **`docker/postgres/init/`** - PostgreSQL initialization
+- ✅ **`01-init-databases.sh`** - Database and extension setup
+- ✅ **`02-create-tables.sql`** - Complete table structure with dynamic partitioning
+- ✅ **`03-insert-base-data.sql`** - Essential system data (roles, permissions, assets)
 
-### 2. Initial Test Data  
-📁 **`src/main/resources/schema/data.sql`** - Development test data
-- ✅ Test users (admin, testuser1, testuser2, vipuser)
-- ✅ Basic assets (BTC, ETH, USDT, USD)
-- ✅ Trading pair configuration (BTCUSDT, ETHUSDT)
-- ✅ Simulated market data and trade records
+### 2. Key Features Implemented
+- ✅ **Dynamic Partition Management** - Automatic monthly partition creation
+- ✅ **Updated Triggers** - Automatic `updated_at` field maintenance
+- ✅ **Comprehensive Indexes** - Optimized for high-performance queries
+- ✅ **Data Constraints** - Ensures data integrity and consistency
+- ✅ **Outbox Pattern** - Event sourcing for microservices architecture
 
-### 3. Architecture Documentation
-📁 **`docs/database-architecture.md`** - Detailed design documentation
+### 3. Database Structure Highlights
+- ✅ **22 core business tables** with proper relationships
+- ✅ **5 partitioned tables** for high-volume data (orders, trades, klines, notifications, audit_logs)
+- ✅ **Complete RBAC system** with users, roles, and permissions
+- ✅ **Double-entry bookkeeping** for financial accuracy
+- ✅ **JSON configuration** for flexible business rules
+
+### 4. Architecture Documentation
+📁 **`docs/database-*.md`** - Comprehensive documentation
 - ✅ Complete table structure explanation
-- ✅ Index and performance optimization strategies
-- ✅ Backup and recovery solutions
+- ✅ ER diagrams and relationships
+- ✅ Performance optimization strategies
 - ✅ Security and maintenance recommendations
-
-### 4. ER Diagrams and Flow Charts
-📁 **`docs/database-er-diagram.md`** - Visual design
-- ✅ Complete entity relationship diagram (Mermaid)
 - ✅ Business process diagrams
 - ✅ Data flow diagrams
 

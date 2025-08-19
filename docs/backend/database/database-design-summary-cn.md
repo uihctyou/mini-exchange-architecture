@@ -19,7 +19,7 @@
 #### 🔒 資金安全保障
 ```sql
 -- 餘額非負約束
-available_balance DECIMAL(36,18) NOT NULL DEFAULT 0 CHECK (available_balance >= 0)
+available_balance DECIMAL(20,8) NOT NULL DEFAULT 0 CHECK (available_balance >= 0)
 -- 複式記帳系統
 balance_before + amount = balance_after
 -- 樂觀鎖防併發
@@ -28,9 +28,15 @@ version INTEGER NOT NULL DEFAULT 0
 
 #### ⚡ 高性能設計
 ```sql
--- 分區表策略 (按月分區)
+-- 分區表策略 (動態月度分區)
 CREATE TABLE orders (...) PARTITION BY RANGE (created_at);
 CREATE TABLE trades (...) PARTITION BY RANGE (created_at);
+CREATE TABLE klines (...) PARTITION BY RANGE (open_time);
+CREATE TABLE notifications (...) PARTITION BY RANGE (created_at);
+CREATE TABLE audit_logs (...) PARTITION BY RANGE (created_at);
+
+-- 動態分區管理函數
+CREATE OR REPLACE FUNCTION create_monthly_partition(table_name TEXT, partition_date DATE);
 
 -- 複合索引優化
 CREATE INDEX idx_orders_price_side ON orders(trading_pair_id, side, price, created_at);
@@ -39,79 +45,206 @@ CREATE INDEX idx_orders_price_side ON orders(trading_pair_id, side, price, creat
 #### 🎛️ 靈活配置系統
 ```sql
 -- JSON 配置的風控規則
-conditions JSONB NOT NULL  -- {"max_daily_volume": 100000}
-actions JSONB NOT NULL     -- {"action": "BLOCK_TRADING"}
+parameters JSONB NOT NULL  -- {"max_daily_volume": 100000}
 
 -- 可配置的交易參數
 price_precision INTEGER NOT NULL DEFAULT 8
-taker_fee_rate DECIMAL(10,6) NOT NULL DEFAULT 0.001
+maker_fee DECIMAL(6,4) NOT NULL DEFAULT 0.001
+taker_fee DECIMAL(6,4) NOT NULL DEFAULT 0.001
 ```
 
 ## 📋 核心表結構
 
-### 用戶與權限系統
+## 📋 核心表結構
+
+### 1. 認證域 (Authentication Domain)
 ```
 users (用戶基本信息)
-├── roles (角色定義)
-├── permissions (權限定義)  
-├── user_roles (用戶角色關聯)
-├── role_permissions (角色權限關聯)
-└── kyc_records (KYC認證記錄)
+├── id, username, email, password_hash
+├── first_name, last_name, phone
+├── status, kyc_level, last_login_at
+├── failed_login_attempts, locked_until
+└── version, created_at, updated_at
+
+roles (角色定義)
+├── id, name, description, is_active
+└── created_at, updated_at
+
+permissions (權限定義)
+├── id, name, resource, action, description
+└── created_at, updated_at
+
+user_roles (用戶角色關聯)
+├── user_id, role_id
+├── granted_at, granted_by
+└── PRIMARY KEY (user_id, role_id)
+
+role_permissions (角色權限關聯)
+├── role_id, permission_id
+└── PRIMARY KEY (role_id, permission_id)
+
+kyc_records (KYC認證記錄)
+├── id, user_id, level, status
+├── document_type, document_number
+├── submitted_data (JSONB), review_notes
+├── reviewed_by, reviewed_at
+└── created_at, updated_at
 ```
 
-### 資產與賬戶系統
+### 2. 資產管理域 (Asset Management Domain)
 ```
 assets (資產定義: BTC, ETH, USDT...)
-├── accounts (用戶多資產賬戶)
-├── transactions (交易記錄 - 複式記帳)
-├── balance_freezes (資金凍結管理)
-└── deposit_withdrawals (充值提現記錄)
+├── id, symbol, name, type
+├── decimals, is_active
+├── min_withdraw_amount, withdraw_fee
+├── daily_withdraw_limit
+└── created_at, updated_at
+
+accounts (用戶多資產賬戶)
+├── id, user_id, asset_id
+├── available_balance, frozen_balance
+├── created_at, updated_at
+└── UNIQUE(user_id, asset_id)
+
+transactions (交易記錄 - 複式記帳)
+├── id, user_id, asset_id, type
+├── amount, balance_before, balance_after
+├── reference_type, reference_id
+├── description, created_at, created_by
+└── CHECK (available_balance >= 0 AND frozen_balance >= 0)
+
+balance_freezes (資金凍結管理)
+├── id, user_id, asset_id, amount
+├── reason, reference_type, reference_id
+├── status, created_at, released_at
+└── status: ACTIVE, RELEASED
+
+deposit_withdrawals (充值提現記錄)
+├── id, user_id, asset_id, type
+├── amount, fee, status
+├── tx_hash, address
+├── confirmations, required_confirmations
+├── processed_at, created_at, updated_at
+└── status: PENDING, CONFIRMED, FAILED, CANCELLED
 ```
 
-### 交易與撮合系統
+### 3. 訂單管理域 (Order Management Domain)
 ```
 trading_pairs (交易對: BTCUSDT, ETHUSDT...)
-├── orders (訂單表 - 分區表)
-├── trades (成交記錄 - 分區表)
-├── klines (K線數據 - 分區表)
-└── ticker_24hr (24小時統計)
+├── id, symbol, base_asset_id, quote_asset_id
+├── status, min_order_amount, max_order_amount
+├── price_precision, amount_precision
+├── maker_fee, taker_fee
+└── created_at, updated_at
+
+orders (訂單表 - 按 created_at 分區)
+├── id, user_id, trading_pair_id
+├── type, side, amount, price
+├── remaining_amount, filled_amount, average_price
+├── status, created_at, updated_at
+└── PARTITION BY RANGE (created_at)
+
+trades (成交記錄 - 按 created_at 分區)
+├── id, trading_pair_id
+├── buy_order_id, sell_order_id
+├── buyer_user_id, seller_user_id
+├── amount, price, buyer_fee, seller_fee
+├── created_at
+└── PARTITION BY RANGE (created_at)
+
+klines (K線數據 - 按 open_time 分區)
+├── id, trading_pair_id, interval
+├── open_time, close_time
+├── open_price, high_price, low_price, close_price
+├── volume, quote_volume, trades_count
+└── PARTITION BY RANGE (open_time)
+
+ticker_24hr (24小時統計)
+├── trading_pair_id (PRIMARY KEY)
+├── open_price, high_price, low_price, close_price
+├── volume, quote_volume
+├── price_change, price_change_percent
+├── trades_count, updated_at
 ```
 
-### 風控與合規系統
+### 4. 風險管理與合規域 (Risk Management & Compliance Domain)
 ```
 risk_rules (風控規則配置)
-├── risk_events (風控事件記錄)
-├── settlement_batches (清算批次)
-├── settlement_details (清算明細)
-└── audit_logs (審計日誌 - 分區表)
+├── id, name, type, parameters (JSONB)
+├── is_active, description
+└── created_at, updated_at
+
+risk_events (風控事件記錄)
+├── id, user_id, rule_id
+├── type, level, details (JSONB)
+├── status, created_at, resolved_at
+└── level: LOW, MEDIUM, HIGH, CRITICAL
+
+settlement_batches (清算批次)
+├── id, batch_date, status
+├── total_trades, total_volume
+├── started_at, completed_at, created_at
+└── UNIQUE(batch_date)
+
+settlement_details (清算明細)
+├── id, batch_id, user_id, asset_id
+├── trade_amount, fee_amount, net_amount
+└── created_at
+
+notification_templates (通知模板)
+├── id, name, type, subject, content
+├── is_active, created_at, updated_at
+└── type: EMAIL, SMS, PUSH, WEBHOOK
+
+notifications (通知記錄 - 按 created_at 分區)
+├── id, user_id, template_id, type
+├── title, content, status
+├── sent_at, error_message, created_at
+└── PARTITION BY RANGE (created_at)
+
+outbox_events (事件發布 - Outbox 模式)
+├── id, aggregate_type, aggregate_id
+├── event_type, event_data (JSONB)
+├── correlation_id, status, retry_count
+├── next_retry_at, created_at, processed_at
+└── status: PENDING, PROCESSED, FAILED
+
+audit_logs (審計日誌 - 按 created_at 分區)
+├── id, user_id, action
+├── resource_type, resource_id
+├── old_values (JSONB), new_values (JSONB)
+├── ip_address, user_agent, created_at
+└── PARTITION BY RANGE (created_at)
 ```
 
 ## 🚀 已實現的文件
 
-### 1. 數據庫 Schema
-📁 **`src/main/resources/schema/schema.sql`** - 完整的數據庫結構
-- ✅ 13個核心業務表 + 分區表
-- ✅ 完整的約束和索引
-- ✅ 觸發器和函數
-- ✅ 初始化數據和權限
+### 1. 數據庫初始化腳本
+📁 **`docker/postgres/init/`** - PostgreSQL 初始化
+- ✅ **`01-init-databases.sh`** - 數據庫和擴展設置
+- ✅ **`02-create-tables.sql`** - 完整表結構含動態分區
+- ✅ **`03-insert-base-data.sql`** - 系統基礎數據（角色、權限、資產）
 
-### 2. 初始測試數據  
-📁 **`src/main/resources/schema/data.sql`** - 開發測試數據
-- ✅ 測試用戶 (admin, testuser1, testuser2, vipuser)
-- ✅ 基礎資產 (BTC, ETH, USDT, USD)
-- ✅ 交易對配置 (BTCUSDT, ETHUSDT)
-- ✅ 模擬市場數據和交易記錄
+### 2. 核心功能實現
+- ✅ **動態分區管理** - 自動月度分區創建
+- ✅ **更新觸發器** - 自動維護 `updated_at` 字段
+- ✅ **綜合索引** - 針對高性能查詢優化
+- ✅ **數據約束** - 確保數據完整性和一致性
+- ✅ **Outbox 模式** - 微服務架構的事件溯源
 
-### 3. 架構文檔
-📁 **`docs/database-architecture.md`** - 詳細設計文檔
+### 3. 數據庫結構亮點
+- ✅ **22個核心業務表** 包含完整關聯關係
+- ✅ **5個分區表** 處理高容量數據（訂單、成交、K線、通知、審計）
+- ✅ **完整 RBAC 系統** 包含用戶、角色和權限
+- ✅ **複式記帳** 確保財務準確性
+- ✅ **JSON 配置** 靈活的業務規則
+
+### 4. 架構文檔
+📁 **`docs/database-*.md`** - 完整文檔
 - ✅ 完整的表結構說明
-- ✅ 索引和性能優化策略
-- ✅ 備份和恢復方案
+- ✅ ER 圖和關聯關係
+- ✅ 性能優化策略
 - ✅ 安全和維護建議
-
-### 4. ER 圖和流程圖
-📁 **`docs/database-er-diagram.md`** - 可視化設計
-- ✅ 完整的實體關係圖 (Mermaid)
 - ✅ 業務流程圖
 - ✅ 數據流向圖
 

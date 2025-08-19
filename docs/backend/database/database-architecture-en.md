@@ -23,10 +23,11 @@ This document describes the complete database architecture design for Mini Excha
 - **Unique Constraints**: Prevent duplicate data
 
 ### 3. Performance Optimization Strategy
-- **Partitioned Tables**: Time-based partitioning for large tables (orders, trades, klines, notifications, audit_logs)
+- **Dynamic Partitioned Tables**: Monthly partitioning for large tables (orders, trades, klines, notifications, audit_logs)
+- **Partition Management Functions**: Automatic partition creation and management
 - **Index Optimization**: Composite indexes optimized for query patterns
-- **View Encapsulation**: Views for common statistical queries
-- **Triggers**: Automatic timestamp updates and data validation
+- **Updated Triggers**: Automatic `updated_at` field maintenance
+- **Data Constraints**: Comprehensive constraints for data integrity
 
 ## Core Table Structure
 
@@ -36,14 +37,20 @@ This document describes the complete database architecture design for Mini Excha
 ```sql
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    uuid UUID NOT NULL DEFAULT uuid_generate_v4(),
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    phone VARCHAR(20),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     kyc_level INTEGER NOT NULL DEFAULT 0,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    version INTEGER NOT NULL DEFAULT 0
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 

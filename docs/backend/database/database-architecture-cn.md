@@ -23,10 +23,11 @@
 - **唯一約束**: 防止重複數據
 
 ### 3. 性能優化策略
-- **分區表**: 按時間分區的大表 (orders, trades, klines, notifications, audit_logs)
+- **動態分區表**: 按月分區的大表 (orders, trades, klines, notifications, audit_logs)
+- **分區管理函數**: 自動分區創建和管理
 - **索引優化**: 針對查詢模式優化的複合索引
-- **視圖封裝**: 常用統計查詢的視圖
-- **觸發器**: 自動更新時間戳和數據校驗
+- **更新觸發器**: 自動維護 `updated_at` 字段
+- **數據約束**: 全面的數據完整性約束
 
 ## 核心表結構
 
@@ -36,14 +37,20 @@
 ```sql
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    uuid UUID NOT NULL DEFAULT uuid_generate_v4(),
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    phone VARCHAR(20),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     kyc_level INTEGER NOT NULL DEFAULT 0,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    version INTEGER NOT NULL DEFAULT 0
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
