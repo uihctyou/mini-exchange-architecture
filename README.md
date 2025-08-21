@@ -185,8 +185,10 @@ mini-exchange-architecture/
 
 ## 7. Related Repositories
 
-* **Backend Microservices** → [mini-exchange-backend](https://github.com/uihctyou/mini-exchange-backend)
-* **Frontend** → [mini-exchange-frontend](https://github.com/uihctyou/mini-exchange-frontend)
+* **Backend Microservices** → [mini-exchange-backend](https://github.com/uihctyou/mini-exchange-backend) (IN PROGRESS)
+* **Frontend (User Portal)** → [mini-exchange-frontend](https://github.com/uihctyou/mini-exchange-frontend) (NOT START)
+* **Backend Web (Admin Portal)** → [mini-exchange-admin](https://github.com/uihctyou/mini-exchange-admin) (NOT START)
+* **Frontend Mobile (App)** → [mini-exchange-mobile](https://github.com/uihctyou/mini-exchange-mobile) (NOT START)
 
 
 
