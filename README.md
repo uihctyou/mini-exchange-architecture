@@ -187,7 +187,7 @@ mini-exchange-architecture/
 
 * **Backend Microservices** → [mini-exchange-backend](https://github.com/uihctyou/mini-exchange-backend) (IN PROGRESS)
 * **Frontend (User Portal)** → [mini-exchange-frontend](https://github.com/uihctyou/mini-exchange-frontend) (NOT START)
-* **Backend Web (Admin Portal)** → [mini-exchange-admin](https://github.com/uihctyou/mini-exchange-admin) (NOT START)
+* **Backend Web (Admin Portal)** → [mini-exchange-admin](https://github.com/uihctyou/mini-exchange-admin) (IN PROGRESS)
 * **Frontend Mobile (App)** → [mini-exchange-mobile](https://github.com/uihctyou/mini-exchange-mobile) (NOT START)
 
 
